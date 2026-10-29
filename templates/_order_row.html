@@ -1,0 +1,20 @@
+{% set st_keys = statuses.keys()|list %}{% set pay_keys = payments.keys()|list %}
+      <tr class="orow st-{{ o.status }} pay-{{ o.payment }}" data-id="{{ o.id }}" data-status="{{ o.status }}" data-pay="{{ o.payment }}" data-total="{{ o.total }}"
+          data-search="{{ (o.number ~ ' ' ~ (o.number|replace('-', '')) ~ ' ' ~ o.name ~ ' ' ~ (o.phone|select('in','0123456789')|join))|lower }}">
+        <td class="num" data-v="{{ o.created_at }}{{ '%06d' % o.id }}">{{ o.number }}{% if o.source == 'manual' %}<br><span class="tagm">вручную</span>{% endif %}</td>
+        <td class="dtc" data-v="{{ o.created_at }}{{ '%06d' % o.id }}">{{ o.created_at|dt }}</td>
+        <td data-v="{{ o.name|lower }}"><b>{{ o.name }}</b><br><a class="tel" href="https://wa.me/{{ o.phone|select('in','0123456789')|join }}" target="_blank">{{ o.phone }}</a>
+          {% if o.comment %}<br><span class="cmt">💬 {{ o.comment }}</span>{% endif %}</td>
+        <td>{{ o.city }}</td>
+        <td>{% for i in o['items'] %}<div class="it">{{ i.name }} × {{ i.qty }}
+          {% if i.custom %}<br><em>✍️ {{ i.custom }}</em>{% endif %}</div>{% endfor %}</td>
+        <td>{{ o.address }}<br><span class="cmt">🚚 {{ o.delivery }}</span></td>
+        <td class="nw" data-v="{{ o.need_date }}"><b>{{ o.need_date|dmy }}</b></td>
+        <td class="nw" data-v="{{ '%010d' % o.total }}"><b>{{ o.total }} {{ s.currency }}</b></td>
+        <td class="ph">{% for i in o['items'] %}{% for ph in i.photos %}<a href="{{ url_for('static', filename=ph) }}" target="_blank" download><img src="{{ url_for('static', filename=ph) }}" alt="фото клиента"></a>{% endfor %}{% endfor %}</td>
+        <td class="sel" data-v="{{ pay_keys.index(o.payment) if o.payment in pay_keys else 0 }}"><form method="post" action="{{ url_for('order_status', oid=o.id) }}" class="stform" onchange="saveStatus(this)">
+          <select name="payment" class="paysel">{% for k, v in payments.items() %}<option value="{{ k }}" {{ 'selected' if k == o.payment }}>{{ v }}</option>{% endfor %}</select></form></td>
+        <td class="sel" data-v="{{ st_keys.index(o.status) if o.status in st_keys else 0 }}"><form method="post" action="{{ url_for('order_status', oid=o.id) }}" class="stform" onchange="saveStatus(this)">
+          <select name="status" class="stsel">{% for k, v in statuses.items() %}<option value="{{ k }}" {{ 'selected' if k == o.status }}>{{ v }}</option>{% endfor %}</select></form></td>
+        <td><button class="delbtn" title="Удалить заказ" onclick="delOrder({{ o.id }}, '{{ o.number }}', this)">🗑</button></td>
+      </tr>

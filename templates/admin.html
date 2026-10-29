@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Админка — {{ s.shop_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v) }}"></head>
+<body class="admin wide">
+<header class="bar">
+  <div class="brand">🎁 {{ s.shop_name }}<span>админка</span></div>
+  <div class="barlinks"><a href="/" target="_blank">Открыть сайт ↗</a><a href="{{ url_for('logout') }}">Выйти</a></div>
+</header>
+<div class="wrap">
+  {% if default_pw %}<p class="warn">⚠️ Используется пароль по умолчанию. Запустите с переменной ADMIN_PASSWORD.</p>{% endif %}
+  <nav class="tabs">
+    <a href="#orders" data-t="orders">Заказы (<span id="ocnt">{{ orders|length }}</span>)</a>
+    <a href="#products" data-t="products">Товары</a>
+    <a href="#settings" data-t="settings">Настройки</a>
+  </nav>
+
+  <section id="orders" class="tab">
+    <div class="stats" id="stats"></div>
+    <div id="toasts" class="toasts"></div>
+    <p class="toolbar"><button class="btn" onclick="openNewOrder()">➕ Новый заказ</button>
+      <a class="btn alt" href="{{ url_for('export_xlsx') }}">⬇️ Excel</a></p>
+    <nav class="chips" id="ofilter">
+      <button class="chip active" data-f="">Все</button>
+      <button class="chip" data-f="active">Активные</button>
+      <button class="chip" data-f="unpaid">Не оплачены</button>
+      <button class="chip" data-f="done">Завершённые</button>
+    </nav>
+    <div class="osearch">
+      <input id="osearch" type="search" placeholder="🔍  Поиск: номер заказа, имя или телефон" autocomplete="off">
+      <span id="ocount" class="hint"></span>
+    </div>
+    <div class="tablewrap">
+    <table class="otable">
+      <thead><tr>
+        <th class="sortable" title="Сортировать">Номер заказа</th><th class="sortable">Дата</th><th class="sortable">Клиент</th>
+        <th class="sortable">Город</th><th>Заказ</th><th>Адрес и доставка</th><th class="sortable">Нужно на</th>
+        <th class="sortable">Сумма</th><th>Фото</th><th class="sortable">Оплата</th><th class="sortable">Этап</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for o in orders %}{% include '_order_row.html' %}{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if not orders %}<p id="noOrders">Заказов пока нет.</p>{% endif %}
+  </section>
+
+<dialog id="newOrder" class="ndialog">
+  <form id="noForm" onsubmit="return false">
+    <h3>Новый заказ <button type="button" class="x" onclick="$d('newOrder').close()">✕</button></h3>
+    <div class="ngrid">
+      <label>Имя клиента *<input name="name" required></label>
+      <label>Телефон *<input name="phone" inputmode="tel" required></label>
+      <label>Город *<select name="city" id="noCity">{% for c in cities %}<option>{{ c }}</option>{% endfor %}</select></label>
+      <label id="noCityOtherWrap" hidden>Какой город *<input name="city_other"></label>
+      <label>Доставка *<select name="delivery" id="noDelivery">{% for k, v in delivery.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+      <label id="noAddrWrap">Точный адрес *<input name="address"></label>
+      <label>Нужно на *<input type="date" name="need_date" id="noDate" required></label>
+      <label>Оплата<select name="payment">{% for k, v in payments.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+      <label>Этап<select name="status">{% for k, v in statuses.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="nitems"><b>Заказ</b><div id="noItems"></div>
+      <button type="button" class="btn alt" onclick="addItemRow()">+ позиция</button></div>
+    <div class="ngrid">
+      <label>Сумма к оплате, {{ s.currency }}<input name="total" id="noTotal" type="number" min="0"></label>
+      <label>Фото <input type="file" id="noFile" accept="image/*" multiple></label>
+    </div>
+    <div id="noThumbs" class="ophotos"></div>
+    <label>Комментарий<textarea name="comment" rows="2"></textarea></label>
+    <p id="noErr" class="err"></p>
+    <button class="btn big" id="noSave" onclick="saveNewOrder()">Создать заказ</button>
+  </form>
+</dialog>
+
+  <section id="products" class="tab">
+    <details class="pform">
+      <summary>➕ Добавить товар</summary>
+      {% set p = {} %}{% include 'product_form.html' %}
+    </details>
+    {% for p in products %}
+    <div class="prow">
+    <details class="pform">
+      <summary>{{ p.name }} — {% if p.price_from %}{{ 'от ' if p.has_range }}{{ p.price_from }} {{ s.currency }}{% else %}по запросу{% endif %}{{ '' if p.active else ' (скрыт)' }}</summary>
+      {% include 'product_form.html' %}
+      <form method="post" action="{{ url_for('delete_product', pid=p.id) }}" onsubmit="return confirm('Удалить товар?')">
+        <button class="btn danger">Удалить</button>
+      </form>
+    </details>
+    <div class="pmove">
+      {% for d, ico, t in (('up', '▲', 'Выше'), ('down', '▼', 'Ниже')) %}
+      <form method="post" action="{{ url_for('move_product', pid=p.id) }}"><input type="hidden" name="dir" value="{{ d }}">
+        <button class="btn alt" title="{{ t }}">{{ ico }}</button></form>
+      {% endfor %}
+    </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section id="settings" class="tab">
+    <form method="post" action="{{ url_for('save_settings') }}" class="stack">
+      <label>Название магазина <input name="shop_name" value="{{ s.shop_name }}"></label>
+      <label>Подзаголовок <input name="tagline" value="{{ s.tagline }}"></label>
+      <label>Номер WhatsApp (с кодом страны, например 77011234567) <input name="whatsapp" value="{{ s.whatsapp }}"></label>
+      <label>Валюта <input name="currency" value="{{ s.currency }}"></label>
+      <button class="btn">Сохранить</button>
+    </form>
+  </section>
+</div>
+<script>
+function tab() {
+  const h = (location.hash || '#orders').slice(1);
+  document.querySelectorAll('.tab').forEach(t => t.style.display = t.id === h ? '' : 'none');
+  document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.t === h));
+}
+addEventListener('hashchange', tab); tab();
+
+let ofilter = '', query = '';
+function applyFilter() {
+  let shown = 0;
+  document.querySelectorAll('.orow').forEach(o => {
+    const st = o.dataset.status, pay = o.dataset.pay;
+    const byChip = !ofilter || (ofilter === 'active' && !['done', 'cancelled'].includes(st))
+      || (ofilter === 'unpaid' && pay === 'unpaid' && st !== 'cancelled') || (ofilter === 'done' && st === 'done');
+    const bySearch = !query || o.dataset.search.includes(query);
+    o.style.display = byChip && bySearch ? '' : 'none';
+    if (byChip && bySearch) shown++;
+  });
+  $c.textContent = (ofilter || query) ? `Найдено: ${shown}` : '';
+}
+const $c = document.getElementById('ocount');
+document.getElementById('osearch').addEventListener('input', e => {
+  query = e.target.value.toLowerCase().replace(/\s+/g, ''); applyFilter();
+});
+document.querySelectorAll('#ofilter .chip').forEach(c => c.onclick = () => {
+  ofilter = c.dataset.f;
+  document.querySelectorAll('#ofilter .chip').forEach(x => x.classList.toggle('active', x === c));
+  applyFilter();
+});
+async function saveStatus(form) {
+  const row = form.closest('tr');
+  const sel = form.querySelector('select');
+  const r = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'fetch'}});
+  if (!r.ok) { alert('Не удалось сохранить, обновите страницу'); return; }
+  if (sel.name === 'status') row.dataset.status = sel.value; else row.dataset.pay = sel.value;
+  form.closest('td').dataset.v = sel.selectedIndex;
+  row.className = `orow st-${row.dataset.status} pay-${row.dataset.pay}`;
+  applyFilter(); updateStats();
+}
+
+// ----- column sorting (click a header; click again to reverse) -----
+document.querySelectorAll('.otable th.sortable').forEach(th => th.addEventListener('click', () => {
+  const i = th.cellIndex, dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+  document.querySelectorAll('.otable th').forEach(x => { x.dataset.dir = ''; });
+  th.dataset.dir = dir;
+  const tb = document.querySelector('.otable tbody');
+  const key = r => { const c = r.cells[i]; return c.dataset.v ?? c.textContent.trim().toLowerCase(); };
+  [...tb.rows].sort((a, b) => {
+    const x = key(a), y = key(b);
+    const num = /^\d+$/.test(x) && /^\d+$/.test(y);
+    const cmp = num ? x - y : x.localeCompare(y, 'ru');
+    return dir === 'asc' ? cmp : -cmp;
+  }).forEach(r => tb.appendChild(r));
+}));
+
+// ----- delete / manual order -----
+const $d = id => document.getElementById(id);
+const CATALOG = {{ catalog|tojson }};
+const CUR = {{ s.currency|tojson }};
+async function delOrder(id, number, btn) {
+  if (!confirm(`Удалить заказ ${number}?\nЭто нельзя отменить, фото заказа тоже удалятся.`)) return;
+  const r = await fetch(`/admin/order/${id}/delete`, {method: 'POST', headers: {'X-Requested-With': 'fetch'}});
+  if (!r.ok) { alert('Не удалось удалить'); return; }
+  btn.closest('tr').remove(); refreshCounters();
+}
+let noPhotos = [];
+function openNewOrder() {
+  $d('noForm').reset(); $d('noItems').innerHTML = ''; noPhotos = []; $d('noThumbs').innerHTML = '';
+  $d('noErr').textContent = ''; totalTouched = false;
+  const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  $d('noDate').value = d.toISOString().slice(0, 10);
+  $d('noCityOtherWrap').hidden = true; $d('noAddrWrap').hidden = false;
+  addItemRow(); $d('newOrder').showModal();
+}
+$d('noCity').addEventListener('change', e => { $d('noCityOtherWrap').hidden = e.target.value !== 'Другое'; });
+$d('noDelivery').addEventListener('change', e => { $d('noAddrWrap').hidden = e.target.value === 'pickup'; });
+let totalTouched = false;
+$d('noTotal').addEventListener('input', () => { totalTouched = true; });
+function addItemRow() {
+  const row = document.createElement('div'); row.className = 'nrow';
+  row.innerHTML = `<select class="pi">
+      <option value="">— выбрать товар —</option>
+      ${CATALOG.map((c, i) => `<option value="${i}">${c.label.replace(/</g, '&lt;')} · ${c.price ? c.price + ' ' + CUR : 'по запросу'}</option>`).join('')}
+      <option value="free">✏️ Своя позиция…</option></select>
+    <input class="fname" placeholder="Название" hidden>
+    <input class="fprice" type="number" min="0" placeholder="Цена" hidden>
+    <input class="qty" type="number" min="1" max="99" value="1" title="Количество">
+    <input class="cu" placeholder="Надпись / имя на шоколадке">
+    <button type="button" class="delbtn" onclick="this.parentNode.remove(); recalc()">✕</button>`;
+  row.querySelector('.pi').onchange = e => {
+    const free = e.target.value === 'free';
+    row.querySelector('.fname').hidden = !free; row.querySelector('.fprice').hidden = !free; recalc();
+  };
+  row.querySelectorAll('.qty,.fprice').forEach(i => i.oninput = recalc);
+  $d('noItems').appendChild(row);
+}
+function readItems() {
+  return [...document.querySelectorAll('#noItems .nrow')].map(r => {
+    const v = r.querySelector('.pi').value, qty = +r.querySelector('.qty').value || 1;
+    const custom = r.querySelector('.cu').value;
+    if (v === 'free') return {name: r.querySelector('.fname').value, price: +r.querySelector('.fprice').value || 0, qty, custom};
+    if (v === '') return null;
+    const c = CATALOG[+v]; return {id: c.id, variant: c.variant, qty, custom, _price: c.price};
+  }).filter(Boolean);
+}
+function recalc() {
+  if (totalTouched) return;
+  $d('noTotal').value = readItems().reduce((a, i) => a + (i._price ?? i.price ?? 0) * i.qty, 0);
+}
+$d('noFile').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  for (const f of files) {
+    const fd = new FormData(); fd.append('photo', f);
+    const r = await fetch('/api/upload', {method: 'POST', body: fd});
+    let d = {}; try { d = await r.json(); } catch (_) {}
+    if (!r.ok) { $d('noErr').textContent = d.error || 'Не удалось загрузить фото'; continue; }
+    noPhotos.push(d.path);
+    $d('noThumbs').insertAdjacentHTML('beforeend', `<img src="/static/${d.path}" alt="">`);
+  }
+});
+async function saveNewOrder() {
+  const f = Object.fromEntries(new FormData($d('noForm')));
+  const items = readItems().map(({_price, ...i}) => i);
+  if (items.length && noPhotos.length) items[0].photos = noPhotos;
+  $d('noErr').textContent = '';
+  const r = await fetch('/admin/order/create', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({...f, total: f.total === '' ? null : f.total, items})});
+  const d = await r.json();
+  if (!r.ok) { $d('noErr').textContent = d.error || 'Ошибка'; return; }
+  alert(`Заказ создан: ${d.number}`); location.reload();
+}
+
+function updateStats() {
+  const rows = [...document.querySelectorAll('.orow')];
+  const live = r => r.dataset.status !== 'cancelled';
+  const active = rows.filter(r => !['done', 'cancelled'].includes(r.dataset.status)).length;
+  const unpaid = rows.filter(r => r.dataset.pay === 'unpaid' && live(r)).length;
+  const paid = rows.filter(r => r.dataset.pay === 'paid' && live(r)).reduce((a, r) => a + +r.dataset.total, 0);
+  $d('stats').innerHTML = [['Всего заказов', rows.length], ['Активные', active], ['Ждут оплаты', unpaid],
+    ['Оплачено', paid.toLocaleString('ru-RU') + ' ' + CUR]].map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+}
+updateStats();
+
+// ----- live updates: new orders and status changes appear without reloading -----
+const baseTitle = document.title;
+let unseen = 0, polling = true;
+const lastId = () => Math.max(0, ...[...document.querySelectorAll('.orow')].map(r => +r.dataset.id));
+function toast(text) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = text;
+  $d('toasts').appendChild(t); setTimeout(() => t.classList.add('out'), 7000); setTimeout(() => t.remove(), 7600);
+}
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination); o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.08;
+    o.start(); o.stop(ctx.currentTime + 0.18);
+  } catch (e) {}
+}
+function refreshCounters() {
+  $d('ocnt').textContent = document.querySelectorAll('.orow').length;
+  updateStats(); applyFilter();
+}
+async function poll() {
+  if (!polling || document.hidden) return;
+  try {
+    const r = await fetch('/admin/orders/poll?after=' + lastId(), {headers: {'X-Requested-With': 'fetch'}});
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('json')) { polling = false; toast('Сессия истекла, войдите заново'); return; }
+    const d = await r.json();
+    const tbody = document.querySelector('.otable tbody');
+    // status/payment changed on another device, or order deleted there
+    document.querySelectorAll('.orow').forEach(row => {
+      const st = d.states[row.dataset.id];
+      if (!st) { row.remove(); return; }
+      const [status, pay] = st;
+      if (row.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+      if (row.dataset.status !== status) {
+        row.querySelector('[name=status]').value = status; row.dataset.status = status;
+        row.querySelector('[name=status]').closest('td').dataset.v = row.querySelector('[name=status]').selectedIndex;
+      }
+      if (row.dataset.pay !== pay) {
+        row.querySelector('[name=payment]').value = pay; row.dataset.pay = pay;
+        row.querySelector('[name=payment]').closest('td').dataset.v = row.querySelector('[name=payment]').selectedIndex;
+      }
+      row.className = `orow st-${status} pay-${pay}`;
+    });
+    if (d.new.length) {
+      const n = $d('noOrders'); if (n) n.remove();
+      tbody.insertAdjacentHTML('afterbegin', d.html);
+      tbody.querySelectorAll(`.orow`).forEach(row => { if (d.new.some(o => o.id === +row.dataset.id)) row.classList.add('flash'); });
+      d.new.forEach(o => toast(`🔔 Новый заказ ${o.number} · ${o.name} · ${o.total.toLocaleString('ru-RU')} ${CUR}`));
+      beep(); unseen += d.new.length; document.title = `(${unseen}) ${baseTitle}`;
+    }
+    refreshCounters();
+  } catch (e) { /* offline: try again on the next tick */ }
+}
+setInterval(poll, 8000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { unseen = 0; document.title = baseTitle; poll(); } });
+window.addEventListener('focus', () => { unseen = 0; document.title = baseTitle; });
+</script>
+</body></html>

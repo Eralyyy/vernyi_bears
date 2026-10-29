@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ s.shop_name }} — {{ s.tagline }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v) }}">
+</head>
+<body>
+<header class="hero">
+  <h1>🎁 {{ s.shop_name }}</h1>
+  <p>{{ s.tagline }}</p>
+  <button class="citychip" onclick="openCityGate(true)">📍 <span id="cityChip"></span> · изменить</button>
+  <ol class="steps">
+    <li><b>1</b> Выберите подарок</li>
+    <li><b>2</b> Оформите заявку</li>
+    <li><b>3</b> Пришлите фото в WhatsApp и оплатите</li>
+  </ol>
+</header>
+
+<div id="cityGate" class="gate">
+  <div class="gatebox">
+    <h2>🎁 {{ s.shop_name }}</h2>
+    <p>В каком городе вы находитесь?</p>
+    <div class="cities">
+      <button onclick="pickCity('Алматы')">Алматы</button>
+      <button onclick="pickCity('Астана')">Астана</button>
+      <button onclick="pickCity('Шымкент')">Шымкент</button>
+      <button onclick="showOther()">Другой город</button>
+    </div>
+    <form id="otherForm" class="other" hidden onsubmit="pickCity('Другое', $('otherCity').value); return false">
+      <input id="otherCity" placeholder="Напишите ваш город" required>
+      <button class="btn">Продолжить</button>
+    </form>
+    <button id="gateCancel" class="linkbtn" hidden onclick="closeCityGate()">Отмена</button>
+  </div>
+</div>
+
+<main class="wrap">
+  {% set cats = products | map(attribute='category') | unique | list %}
+  {% if cats | length > 1 %}
+  <nav class="chips">
+    <button class="chip active" data-cat="">Все</button>
+    {% for c in cats if c %}<button class="chip" data-cat="{{ c }}">{{ c }}</button>{% endfor %}
+  </nav>
+  {% endif %}
+
+  <section class="grid">
+    {% for p in products %}
+    <article class="card" data-cat="{{ p.category }}" onclick="openProduct({{ p.id }})">
+      <div class="pic">
+        {% if p.images %}<img src="{{ url_for('static', filename=p.thumbs[0]) }}" alt="{{ p.name }}" width="480" height="440" loading="lazy" decoding="async">
+        {% else %}<span>🎀</span>{% endif %}
+        {% if p.images|length > 1 %}<span class="count">📷 {{ p.images|length }}</span>{% endif %}
+      </div>
+      <div class="body">
+        <h3>{{ p.name }}</h3>
+        {% if p.variants|length > 1 %}<p class="desc">{{ p.variants|length }} вариантов на выбор</p>{% endif %}
+        <div class="row">
+          <b>{% if not p.price_from %}Цена по запросу{% else %}{{ 'от ' if p.has_range }}{{ '{:,}'.format(p.price_from).replace(',', ' ') }} {{ s.currency }}{% endif %}</b>
+          <button class="btn" onclick="event.stopPropagation(); openProduct({{ p.id }})">Выбрать</button>
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <p>Товаров пока нет.</p>
+    {% endfor %}
+  </section>
+</main>
+
+<!-- product modal -->
+<div id="pmodal" class="modal" onclick="if (event.target === this) closeProduct()">
+  <div class="sheet">
+    <button class="x close" onclick="closeProduct()">✕</button>
+    <div id="gallery" class="gallery"></div>
+    <div id="dots" class="dots"></div>
+    <div class="pbody">
+      <h2 id="pname"></h2>
+      <p id="pdesc" class="pdesc"></p>
+      <div id="pvariants" class="variants"></div>
+      <label id="pcustomWrap" class="customwrap">
+        Имя на шоколадке / пожелания
+        <input id="pcustom" placeholder="Например: Айгерим. Фото пришлёте в WhatsApp">
+      </label>
+      <div id="pphotoWrap" class="photowrap">
+        <label class="attach">📎 Прикрепить фото<input id="pfile" type="file" accept="image/*" multiple hidden></label>
+        <span class="hint">Фото для именного подарка, можно несколько</span>
+        <div id="pthumbs" class="pthumbs"></div>
+        <p id="perr" class="err"></p>
+      </div>
+      <div class="padd">
+        <div class="qty"><button onclick="pq(-1)">−</button><span id="pqty">1</span><button onclick="pq(1)">+</button></div>
+        <button id="paddBtn" class="btn big" onclick="addCurrent()"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button id="cartBtn" class="cart-fab" onclick="toggleCart(true)">🛒 <span id="cartCount">0</span></button>
+
+<aside id="cart" class="drawer">
+  <div class="drawer-head"><h2>Корзина</h2><button class="x" onclick="toggleCart(false)">✕</button></div>
+  <div id="cartItems"></div>
+  <div class="total">Сумма на оплату: <b id="cartTotal">0</b> {{ s.currency }}<small>доставка не входит в сумму</small></div>
+  <form id="orderForm">
+    <input name="name" placeholder="Ваше имя *" required>
+    <input name="phone" placeholder="Телефон *" inputmode="tel" required>
+    <p class="cityline">🏙 Город: <b id="cityLabel"></b> <a href="#" onclick="openCityGate(true); return false">изменить</a></p>
+    <fieldset class="deliv">
+      <legend>Как получить заказ *</legend>
+      <label><input type="radio" name="delivery" value="indrive" required> inDrive</label>
+      <label><input type="radio" name="delivery" value="yandex"> Яндекс</label>
+      <label><input type="radio" name="delivery" value="own"> Наша доставка <small>(по тарифу Яндекса)</small></label>
+      <label><input type="radio" name="delivery" value="pickup"> Самовывоз</label>
+    </fieldset>
+    <input name="address" id="address" placeholder="Точный адрес: улица, дом, кв., подъезд *" required>
+    <label class="fl">На какую дату нужен заказ *<input type="date" name="need_date" id="needDate" required></label>
+    <textarea name="comment" rows="2" placeholder="Комментарий: время, пожелания"></textarea>
+    <button class="btn big" type="submit">Оформить в WhatsApp</button>
+    <p class="hint">Заявка откроется в WhatsApp со всеми данными. Фото, которые вы прикрепили, мы увидим в заявке. Оплату обсудим в WhatsApp.</p>
+    <p id="err" class="err"></p>
+  </form>
+</aside>
+<div id="shade" class="shade" onclick="toggleCart(false)"></div>
+
+<script>
+const CUR = {{ s.currency|tojson }};
+const PRODUCTS = Object.fromEntries({{ products|tojson }}.map(p => [p.id, p]));
+const IMG = {{ url_for('static', filename='')|tojson }};
+let place = null;   // {city, other}
+try { place = JSON.parse(localStorage.getItem('place') || 'null'); } catch (e) {}
+let cart = [];
+try { cart = JSON.parse(localStorage.getItem('cart2') || '[]'); } catch (e) {}
+
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('ru-RU');
+const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+const saveCart = () => { try { localStorage.setItem('cart2', JSON.stringify(cart)); } catch (e) {} };
+
+// ----- product modal -----
+let cur = null, curVariant = 0, curQty = 1, curPhotos = [];
+
+// ----- photo attach -----
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.88));
+    return blob ? new File([blob], 'photo.jpg', {type: 'image/jpeg'}) : file;
+  } catch (e) { return file; }
+}
+async function uploadPhoto(file) {
+  const fd = new FormData(); fd.append('photo', file);
+  const r = await fetch('/api/upload', {method: 'POST', body: fd});
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(d.error || 'Не удалось загрузить фото');
+  return d.path;
+}
+function renderThumbs() {
+  $('pthumbs').innerHTML = curPhotos.map((p, i) => `
+    <div class="pth ${p.path ? '' : 'pending'}"><img src="${p.url}" alt="">
+      <button type="button" onclick="rmPhoto(${i})">✕</button></div>`).join('');
+  $('paddBtn').disabled = curPhotos.some(p => !p.path);
+}
+function rmPhoto(i) { curPhotos.splice(i, 1); renderThumbs(); }
+$('pfile').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  $('perr').textContent = '';
+  for (const f of files) {
+    if (curPhotos.length >= 10) { $('perr').textContent = 'Максимум 10 фото'; break; }
+    const item = {url: URL.createObjectURL(f), path: null};
+    curPhotos.push(item); renderThumbs();
+    try { item.path = await uploadPhoto(await shrink(f)); }
+    catch (err) { curPhotos.splice(curPhotos.indexOf(item), 1); $('perr').textContent = err.message; }
+    renderThumbs();
+  }
+});
+
+function priceOf(p, v) { return p.variants.length ? p.variants[v].price : p.price; }
+function priceText(n) { return n ? `${fmt(n)} ${CUR}` : 'по запросу'; }
+
+function openProduct(id) {
+  cur = PRODUCTS[id]; curVariant = 0; curQty = 1; curPhotos = []; renderThumbs(); $('perr').textContent = '';
+  $('pphotoWrap').style.display = cur.personalizable ? '' : 'none';
+  $('pname').textContent = cur.name;
+  $('pdesc').textContent = cur.description;
+  $('pcustom').value = '';
+  $('pcustomWrap').style.display = cur.personalizable ? '' : 'none';
+  $('gallery').innerHTML = cur.images.length
+    ? cur.fulls.map((i, n) => `<img src="${IMG}${i}" alt="" decoding="async"${n ? ' loading="lazy"' : ''}>`).join('')
+    : '<div class="noimg">🎀</div>';
+  $('gallery').scrollLeft = 0;
+  $('dots').innerHTML = cur.images.length > 1 ? cur.images.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('') : '';
+  $('pvariants').innerHTML = cur.variants.length ? cur.variants.map((v, i) => `
+    <label class="var"><input type="radio" name="var" ${i ? '' : 'checked'} onchange="pickVariant(${i})">
+      <span>${esc(v.name)}</span><b>${fmt(v.price)} ${CUR}</b></label>`).join('') : '';
+  upd();
+  $('pmodal').classList.add('open'); document.body.classList.add('lock');
+  if (cur.variants.length && cur.variants[0].photo) showPhoto(cur.variants[0].photo - 1, false);
+}
+function closeProduct() { $('pmodal').classList.remove('open'); document.body.classList.remove('lock'); }
+function showPhoto(n, smooth) {
+  const g = $('gallery');
+  if (n >= 0 && n < cur.images.length) g.scrollTo({left: n * g.clientWidth, behavior: smooth ? 'smooth' : 'auto'});
+}
+function pickVariant(i) {
+  curVariant = i; upd();
+  const ph = cur.variants[i].photo;
+  if (ph) showPhoto(ph - 1, true);
+}
+function pq(d) { curQty = Math.max(1, Math.min(99, curQty + d)); upd(); }
+function upd() {
+  $('pqty').textContent = curQty;
+  const pr = priceOf(cur, curVariant);
+  $('paddBtn').textContent = pr ? `В корзину · ${fmt(pr * curQty)} ${CUR}` : 'Добавить в заявку';
+}
+$('gallery').addEventListener('scroll', e => {
+  const i = Math.round(e.target.scrollLeft / e.target.clientWidth);
+  [...$('dots').children].forEach((d, k) => d.classList.toggle('on', k === i));
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeProduct(); toggleCart(false); } });
+
+function addCurrent() {
+  const v = cur.variants.length ? curVariant : null;
+  const custom = $('pcustom').value.trim();
+  const photos = curPhotos.filter(p => p.path).map(p => p.path);
+  const key = `${cur.id}:${v}:${custom}:${photos.join(',')}`;
+  const ex = cart.find(i => i.key === key);
+  if (ex) ex.qty += curQty;
+  else cart.push({key, id: cur.id, variant: v, qty: curQty, custom, photos,
+    name: cur.name + (v !== null ? ` — ${cur.variants[v].name}` : ''), price: priceOf(cur, curVariant)});
+  closeProduct(); render(); toggleCart(true);
+}
+
+// ----- cart -----
+function chg(n, d) {
+  cart[n].qty += d;
+  if (cart[n].qty < 1) cart.splice(n, 1);
+  render();
+}
+function toggleCart(open) {
+  $('cart').classList.toggle('open', open);
+  $('shade').classList.toggle('open', open);
+}
+function render() {
+  saveCart();
+  $('cartCount').textContent = cart.reduce((a, i) => a + i.qty, 0);
+  $('cartTotal').textContent = fmt(cart.reduce((a, i) => a + i.qty * i.price, 0));
+  $('cartItems').innerHTML = cart.length ? cart.map((i, n) => `
+    <div class="line">
+      <div class="l1"><span>${esc(i.name)}</span><b>${i.price ? fmt(i.price * i.qty) + ' ' + CUR : 'по запросу'}</b></div>
+      ${i.custom ? `<div class="cu">✍️ ${esc(i.custom)}</div>` : ''}
+      ${(i.photos || []).length ? `<div class="cthumbs">${i.photos.map(p => `<img src="${IMG}${p}" alt="">`).join('')}</div>` : ''}
+      <div class="qty"><button onclick="chg(${n},-1)">−</button><span>${i.qty}</span><button onclick="chg(${n},1)">+</button></div>
+    </div>`).join('') : '<p class="empty">Корзина пуста</p>';
+}
+
+$('orderForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('err').textContent = '';
+  if (!cart.length) { $('err').textContent = 'Добавьте товары в корзину'; return; }
+  if (!place) { toggleCart(false); openCityGate(false); return; }
+  const f = Object.fromEntries(new FormData(e.target));
+  f.city = place.city; f.city_other = place.other;
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/order', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({...f, items: cart.map(({id, variant, qty, custom, photos}) => ({id, variant, qty, custom, photos}))})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Ошибка');
+    cart = []; render(); e.target.reset();
+    window.location.href = d.whatsapp_url;
+  } catch (err) { $('err').textContent = err.message; }
+  btn.disabled = false;
+});
+
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+  document.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === c));
+  document.querySelectorAll('.card').forEach(card =>
+    card.style.display = !c.dataset.cat || card.dataset.cat === c.dataset.cat ? '' : 'none');
+});
+// ----- city gate -----
+const cityName = p => p ? (p.city === 'Другое' ? p.other : p.city) : '';
+function renderCity() {
+  $('cityChip').textContent = cityName(place) || 'Выберите город';
+  $('cityLabel').textContent = cityName(place);
+}
+function openCityGate(cancelable) {
+  $('otherForm').hidden = true;
+  $('gateCancel').hidden = !(cancelable && place);
+  $('cityGate').classList.add('open'); document.body.classList.add('lock');
+}
+function closeCityGate() { $('cityGate').classList.remove('open'); document.body.classList.remove('lock'); }
+function showOther() { $('otherForm').hidden = false; $('otherCity').focus(); }
+function pickCity(city, other) {
+  other = (other || '').trim();
+  if (city === 'Другое' && !other) return;
+  place = {city, other};
+  try { localStorage.setItem('place', JSON.stringify(place)); } catch (e) {}
+  renderCity(); closeCityGate();
+}
+renderCity();
+if (!place) openCityGate(false);
+document.querySelectorAll('input[name=delivery]').forEach(r => r.addEventListener('change', () => {
+  const pickup = r.value === 'pickup' && r.checked;
+  if (!r.checked) return;
+  $('address').hidden = pickup; $('address').required = !pickup;
+}));
+const todayStr = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+$('needDate').min = todayStr();
+render();
+</script>
+</body>
+</html>

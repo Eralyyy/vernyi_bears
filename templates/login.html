@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v) }}"></head>
+<body class="center">
+<form method="post" class="login">
+  <h2>Админка</h2>
+  <input type="password" name="password" placeholder="Пароль" autofocus required>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <button class="btn big">Войти</button>
+</form></body></html>

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Фото к заявке №{{ number }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v) }}"></head>
+<body><div class="wrap">
+  <h2>Фото к заявке №{{ number }} · {{ s.shop_name }}</h2>
+  <div class="ophotos big">
+    {% for ph in photos %}
+    <a href="{{ url_for('static', filename=ph) }}" download><img src="{{ url_for('static', filename=ph) }}" alt="Фото {{ loop.index }}"></a>
+    {% else %}<p>Фото нет.</p>{% endfor %}
+  </div>
+  <p class="hint">Нажмите на фото, чтобы скачать оригинал.</p>
+</div></body></html>

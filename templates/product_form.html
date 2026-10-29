@@ -1,0 +1,21 @@
+<form method="post" action="{{ url_for('save_product') }}" enctype="multipart/form-data" class="stack">
+  {% if p.id %}<input type="hidden" name="id" value="{{ p.id }}">{% endif %}
+  <label>Название <input name="name" value="{{ p.name or '' }}" required></label>
+  <label>Описание <textarea name="description" rows="3">{{ p.description or '' }}</textarea></label>
+  <label>Варианты и цены (по одному в строке: «Название — цена | номер фото», номер фото необязателен)
+    <textarea name="variants" rows="4" placeholder="Мини сердечко — 18 500 | 5&#10;Premium бокс — 55 000 | 2">{{ variants_text(p.variants) if p.variants else '' }}</textarea></label>
+  <label>Цена, если вариантов нет (0 — «по запросу») <input name="price" type="number" min="0" value="{{ p.price if p.variants is not defined or not p.variants else '' }}"></label>
+  <label>Категория <input name="category" value="{{ p.category or '' }}"></label>
+  {% if p.images %}
+  <div class="thumbs">
+    {% for img in p.images %}
+    <label class="thumb"><img src="{{ url_for('static', filename=img) }}" alt="">
+      <span><input type="checkbox" name="remove_img" value="{{ img }}"> удалить</span></label>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <label>Добавить фото (можно несколько) <input type="file" name="image" accept="image/*" multiple></label>
+  <label class="check"><input type="checkbox" name="personalizable" {{ 'checked' if p.personalizable }}> Именной (клиент вводит имя/пожелания)</label>
+  <label class="check"><input type="checkbox" name="active" {{ 'checked' if p.active is not defined or p.active }}> Показывать на сайте</label>
+  <button class="btn">Сохранить</button>
+</form>
