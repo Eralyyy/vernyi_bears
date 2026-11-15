@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Update the live site. Code, templates, styles and catalog photos are replaced;
 # the orders database, client photos, product uploads and .env on the server are kept.
-#   ./deploy.sh
+#   DEPLOY_SERVER=user@host ./deploy.sh
 set -euo pipefail
-SERVER=root@142.93.163.218
+SERVER="${DEPLOY_SERVER:?set DEPLOY_SERVER=user@host}"
 cd "$(dirname "$0")"
 COPYFILE_DISABLE=1 tar czf /tmp/vb-update.tgz \
   --exclude=__pycache__ --exclude='скриншоты' --exclude=shop.db --exclude=.env \
